@@ -13,6 +13,11 @@ import {
   Upload,
   Video,
   X,
+  Navigation,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 
 export default function Dashboard({ onBack }) {
@@ -23,6 +28,7 @@ export default function Dashboard({ onBack }) {
   const [throughput, setThroughput] = useState(0);
   const [uploadedVideo, setUploadedVideo] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [selectedDirection, setSelectedDirection] = useState(null);
 
   const [intersections, setIntersections] = useState([
     { id: 1, name: "Main St & 1st Ave", signal: "green", queue: 12, waiting: 23, x: 30, y: 30 },
@@ -130,8 +136,16 @@ export default function Dashboard({ onBack }) {
     if (uploadedVideo) {
       URL.revokeObjectURL(uploadedVideo.url);
       setUploadedVideo(null);
+      setSelectedDirection(null);
     }
   };
+
+  const directions = [
+    { id: 'north', label: 'North', icon: ArrowUp, color: 'bg-blue-500' },
+    { id: 'east', label: 'East', icon: ArrowRight, color: 'bg-green-500' },
+    { id: 'south', label: 'South', icon: ArrowDown, color: 'bg-orange-500' },
+    { id: 'west', label: 'West', icon: ArrowLeft, color: 'bg-purple-500' },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-slate-950 to-black text-white p-6">
@@ -297,12 +311,47 @@ export default function Dashboard({ onBack }) {
               <video
                 src={uploadedVideo.url}
                 controls
-                className="w-full max-h-64 rounded-lg"
+                className="w-full max-h-64 rounded-lg mb-4"
               >
                 Your browser does not support the video tag.
               </video>
-              <div className="mt-4 flex gap-3">
-                <button className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg font-semibold transition-all">
+              
+              {/* Ambulance Direction Selector */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Navigation className="w-5 h-5 text-red-300" />
+                  <span className="font-semibold text-white">Ambulance Direction</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {directions.map((direction) => {
+                    const IconComponent = direction.icon;
+                    return (
+                      <button
+                        key={direction.id}
+                        onClick={() => setSelectedDirection(direction.id)}
+                        className={`p-4 rounded-xl border-2 transition-all flex items-center gap-3 ${
+                          selectedDirection === direction.id
+                            ? `${direction.color} border-white shadow-lg`
+                            : 'bg-white/5 border-white/20 hover:border-white/40'
+                        }`}
+                      >
+                        <IconComponent className="w-6 h-6" />
+                        <span className="font-semibold">{direction.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <button 
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                    selectedDirection 
+                      ? 'bg-green-500 hover:bg-green-600' 
+                      : 'bg-gray-500 cursor-not-allowed'
+                  }`}
+                  disabled={!selectedDirection}
+                >
                   Analyze Traffic
                 </button>
                 <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition-all">
