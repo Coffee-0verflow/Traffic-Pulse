@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   ArrowRight,
 } from "lucide-react";
+import { api } from '../services/api';
 
 export default function Dashboard({ onBack }) {
   const [isRunning, setIsRunning] = useState(false);
@@ -29,6 +30,8 @@ export default function Dashboard({ onBack }) {
   const [uploadedVideo, setUploadedVideo] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedDirection, setSelectedDirection] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
 
   const [intersections, setIntersections] = useState([
     { id: 1, name: "Main St & 1st Ave", signal: "green", queue: 12, waiting: 23, x: 30, y: 30 },
@@ -82,18 +85,6 @@ export default function Dashboard({ onBack }) {
     return () => clearInterval(interval);
   }, [isRunning, avgWaitTime, emergencyDelay]);
 
-  const handleReset = () => {
-    setIsRunning(false);
-    setEpisode(0);
-    setAvgWaitTime(45.2);
-    setEmergencyDelay(100);
-    setThroughput(0);
-    setMetrics({
-      waitTimeHistory: Array(20).fill(45),
-      emergencyHistory: Array(20).fill(100),
-    });
-  };
-
   const emergencyReduction = (((100 - emergencyDelay) / 100) * 100).toFixed(1);
   const waitTimeReduction = (((45.2 - avgWaitTime) / 45.2) * 100).toFixed(1);
 
@@ -107,7 +98,7 @@ export default function Dashboard({ onBack }) {
     setIsDragOver(false);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = async (e) => {
     e.preventDefault();
     setIsDragOver(false);
     const files = Array.from(e.dataTransfer.files);
@@ -129,6 +120,56 @@ export default function Dashboard({ onBack }) {
         url: URL.createObjectURL(file),
         name: file.name
       });
+    }
+  };
+
+  const handleAnalyzeTraffic = async () => {
+    if (!uploadedVideo || !selectedDirection) return;
+    
+    setIsAnalyzing(true);
+    try {
+      // First upload the video
+      const uploadResult = await api.uploadVideo(uploadedVideo.file, selectedDirection);
+      
+      // Then analyze it with YOLO
+      const analysisResult = await api.analyzeVideo(uploadResult.videoId, selectedDirection);
+      
+      setAnalysisResult(analysisResult.data);
+      console.log('YOLO Analysis result:', analysisResult);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleSimulationToggle = async () => {
+    try {
+      if (isRunning) {
+        await api.pauseSimulation();
+      } else {
+        await api.startSimulation();
+      }
+      setIsRunning(!isRunning);
+    } catch (error) {
+      console.error('Simulation control failed:', error);
+    }
+  };
+
+  const handleReset = async () => {
+    try {
+      await api.resetSimulation();
+      setIsRunning(false);
+      setEpisode(0);
+      setAvgWaitTime(45.2);
+      setEmergencyDelay(100);
+      setThroughput(0);
+      setMetrics({
+        waitTimeHistory: Array(20).fill(45),
+        emergencyHistory: Array(20).fill(100),
+      });
+    } catch (error) {
+      console.error('Reset failed:', error);
     }
   };
 
@@ -179,7 +220,7 @@ export default function Dashboard({ onBack }) {
             <h2 className="text-2xl font-bold text-cyan-300">Control Center</h2>
             <div className="flex gap-3">
               <button
-                onClick={() => setIsRunning(!isRunning)}
+                onClick={handleSimulationToggle}
                 className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all ${
                   isRunning ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
                 }`}
@@ -345,19 +386,60 @@ export default function Dashboard({ onBack }) {
               
               <div className="flex gap-3">
                 <button 
-                  className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                    selectedDirection 
+                  onClick={handleAnalyzeTraffic}
+                  disabled={!selectedDirection || isAnalyzing}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${
+                    selectedDirection && !isAnalyzing
                       ? 'bg-green-500 hover:bg-green-600' 
                       : 'bg-gray-500 cursor-not-allowed'
                   }`}
-                  disabled={!selectedDirection}
                 >
-                  Analyze Traffic
+                  {isAnalyzing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Analyze Traffic'
+                  )}
                 </button>
                 <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold transition-all">
                   Extract Patterns
                 </button>
               </div>
+              
+              {/* Analysis Results */}
+              {analysisResult && (
+                <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <h4 className="font-semibold text-green-300 mb-2">YOLO Analysis Results</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-300">Vehicles Detected:</span>
+                      <span className="ml-2 font-semibold text-white">{analysisResult.total_vehicles}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-300">Congestion Level:</span>
+                      <span className="ml-2 font-semibold text-white">{analysisResult.congestion_level?.toFixed(1)}%</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-300">Path Status:</span>
+                      <span className={`ml-2 font-semibold ${
+                        analysisResult.ambulance_path_clear ? 'text-green-300' : 'text-red-300'
+                      }`}>
+                        {analysisResult.ambulance_path_clear ? 'Clear' : 'Congested'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <span className="text-slate-300 text-sm">Recommendations:</span>
+                    <ul className="mt-1 text-sm text-white">
+                      {analysisResult.recommendations?.map((rec, i) => (
+                        <li key={i} className="ml-2">• {rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
